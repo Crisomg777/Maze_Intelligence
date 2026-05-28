@@ -1,0 +1,74 @@
+/**
+ * Player.jack
+ * Maze Intelligence - Jugador controlado por teclado.
+ *
+ * Controles:
+ *   130 = Izquierda   132 = Derecha
+ *   131 = Arriba      133 = Abajo
+ */
+class Player {
+
+    field int row, col;
+    field int cellW, cellH;
+
+    constructor Player new(int startRow, int startCol, int cw, int ch) {
+        let row   = startRow;
+        let col   = startCol;
+        let cellW = cw;
+        let cellH = ch;
+        return this;
+    }
+
+    method int getRow() { return row; }
+    method int getCol() { return col; }
+
+    method boolean move(int key, Array map) {
+        var int newRow, newCol;
+        let newRow = row;
+        let newCol = col;
+
+        if (key = 131) { let newRow = row - 1; }
+        if (key = 133) { let newRow = row + 1; }
+        if (key = 130) { let newCol = col - 1; }
+        if (key = 132) { let newCol = col + 1; }
+
+        if (newRow < 0)  { return false; }
+        if (newRow > 19) { return false; }
+        if (newCol < 0)  { return false; }
+        if (newCol > 19) { return false; }
+        if (map[(newRow * 20) + newCol] = 1) { return false; }
+
+        do erase();
+        let row = newRow;
+        let col = newCol;
+        do draw();
+        return true;
+    }
+
+    method void draw() {
+        var int x1, y1, x2, y2;
+        let x1 = col * cellW;
+        let y1 = row * cellH;
+        let x2 = x1 + cellW - 2;
+        let y2 = y1 + cellH - 2;
+        do Screen.setColor(true);
+        do Screen.drawRectangle(x1 + 2, y1 + 2, x2 - 2, y2 - 2);
+        return;
+    }
+
+    method void erase() {
+        var int x1, y1, x2, y2;
+        let x1 = col * cellW;
+        let y1 = row * cellH;
+        let x2 = x1 + cellW - 2;
+        let y2 = y1 + cellH - 2;
+        do Screen.setColor(false);
+        do Screen.drawRectangle(x1 + 2, y1 + 2, x2 - 2, y2 - 2);
+        return;
+    }
+
+    method void dispose() {
+        do Memory.deAlloc(this);
+        return;
+    }
+}

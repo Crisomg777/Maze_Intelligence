@@ -1,0 +1,227 @@
+/**
+ * Enemy.jack
+ * Maze Intelligence - Enemigo con IA basada en BFS.
+ *
+ * Spawn aleatorio: recibe la semilla desde Game.jack.
+ * La semilla es el tiempo que tardó el usuario en presionar
+ * ESPACIO en la pantalla de inicio — varía en cada partida.
+ *
+ * Zona prohibida de spawn: filas 1-8, cols 1-8.
+ * BFS real para encontrar el camino más corto al jugador.
+ */
+class Enemy {
+
+    field int row, col;
+    field int cellW, cellH;
+    field int moveDelay, delayCount;
+    field Array bfsQueue;
+    field Array bfsPrev;
+    field int nextRow, nextCol;
+
+    constructor Enemy new(int cw, int ch, int delay, Array map, int seed) {
+        let cellW      = cw;
+        let cellH      = ch;
+        let moveDelay  = delay;
+        let delayCount = 0;
+        let bfsQueue   = Array.new(400);
+        let bfsPrev    = Array.new(400);
+        do spawnRandom(map, seed);
+        return this;
+    }
+
+    method int getRow() { return row; }
+    method int getCol() { return col; }
+
+    // ----------------------------------------------------------------
+    // Spawn aleatorio fuera de la zona 8x8 (filas 1-8, cols 1-8).
+    // ----------------------------------------------------------------
+    method void spawnRandom(Array map, int seed) {
+        var int candidate, r, c, tries;
+        var boolean valid;
+
+        if (seed < 1) { let seed = 1; }
+
+        let tries = 0;
+        let valid = false;
+
+        while (~valid) {
+            let seed = (seed * 31421) + 6927;
+            if (seed < 0) { let seed = -seed; }
+
+            let candidate = seed - ((seed / 400) * 400);
+            let r = candidate / 20;
+            let c = candidate - (r * 20);
+
+            let valid = true;
+
+            if (map[candidate] = 1) { let valid = false; }
+            if (r = 0)  { let valid = false; }
+            if (r = 19) { let valid = false; }
+            if (c = 0)  { let valid = false; }
+            if (c = 19) { let valid = false; }
+
+            // Zona prohibida: filas 1-8 Y cols 1-8
+            if (~(r > 8)) {
+                if (~(c > 8)) {
+                    let valid = false;
+                }
+            }
+
+            let tries = tries + 1;
+            if (tries > 600) {
+                let r = 18;
+                let c = 18;
+                let valid = true;
+            }
+        }
+
+        let row = r;
+        let col = c;
+        return;
+    }
+
+    // ----------------------------------------------------------------
+    // Movimiento con delay — recalcula BFS en cada turno del enemigo
+    // ----------------------------------------------------------------
+    method void move(int pRow, int pCol, Array map) {
+        let delayCount = delayCount + 1;
+        if (delayCount < moveDelay) { return; }
+        let delayCount = 0;
+
+        do computeBFS(pRow, pCol, map);
+
+        if (~(nextRow = -1)) {
+            do erase();
+            let row = nextRow;
+            let col = nextCol;
+            do draw();
+        }
+        return;
+    }
+
+    // ----------------------------------------------------------------
+    // BFS desde posición del enemigo hasta posición del jugador.
+    // ----------------------------------------------------------------
+    method void computeBFS(int pRow, int pCol, Array map) {
+        var int head, tail, curr, currR, currC, ni, i;
+
+        let i = 0;
+        while (i < 400) {
+            let bfsPrev[i] = -1;
+            let i = i + 1;
+        }
+
+        let head = 0;
+        let tail = 0;
+        let curr = (row * 20) + col;
+        let bfsQueue[tail] = curr;
+        let tail = tail + 1;
+        let bfsPrev[curr] = curr;
+
+        let nextRow = -1;
+        let nextCol = -1;
+
+        while (head < tail) {
+            let curr  = bfsQueue[head];
+            let head  = head + 1;
+            let currR = curr / 20;
+            let currC = curr - (currR * 20);
+
+            if ((currR = pRow) & (currC = pCol)) {
+                do reconstructStep(curr);
+                let head = tail;
+            } else {
+                // Arriba
+                if (currR > 0) {
+                    let ni = ((currR - 1) * 20) + currC;
+                    if ((map[ni] = 0) & (bfsPrev[ni] = -1)) {
+                        let bfsPrev[ni] = curr;
+                        let bfsQueue[tail] = ni;
+                        let tail = tail + 1;
+                    }
+                }
+                // Abajo
+                if (currR < 19) {
+                    let ni = ((currR + 1) * 20) + currC;
+                    if ((map[ni] = 0) & (bfsPrev[ni] = -1)) {
+                        let bfsPrev[ni] = curr;
+                        let bfsQueue[tail] = ni;
+                        let tail = tail + 1;
+                    }
+                }
+                // Izquierda
+                if (currC > 0) {
+                    let ni = (currR * 20) + (currC - 1);
+                    if ((map[ni] = 0) & (bfsPrev[ni] = -1)) {
+                        let bfsPrev[ni] = curr;
+                        let bfsQueue[tail] = ni;
+                        let tail = tail + 1;
+                    }
+                }
+                // Derecha
+                if (currC < 19) {
+                    let ni = (currR * 20) + (currC + 1);
+                    if ((map[ni] = 0) & (bfsPrev[ni] = -1)) {
+                        let bfsPrev[ni] = curr;
+                        let bfsQueue[tail] = ni;
+                        let tail = tail + 1;
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // ----------------------------------------------------------------
+    // Reconstruye el camino y guarda el primer paso desde el enemigo.
+    // ----------------------------------------------------------------
+    method void reconstructStep(int dest) {
+        var int origin, curr;
+        let origin = (row * 20) + col;
+        let curr   = dest;
+
+        while (~(bfsPrev[curr] = origin)) {
+            let curr = bfsPrev[curr];
+            if (curr = origin) {
+                let nextRow = -1;
+                let nextCol = -1;
+                return;
+            }
+        }
+
+        let nextRow = curr / 20;
+        let nextCol = curr - (nextRow * 20);
+        return;
+    }
+
+    method void draw() {
+        var int x1, y1, x2, y2;
+        let x1 = col * cellW;
+        let y1 = row * cellH;
+        let x2 = x1 + cellW - 2;
+        let y2 = y1 + cellH - 2;
+        do Screen.setColor(true);
+        do Screen.drawRectangle(x1 + 1, y1 + 1, x2 - 1, y2 - 1);
+        do Screen.setColor(false);
+        do Screen.drawRectangle(x1 + 4, y1 + 3, x2 - 4, y2 - 3);
+        return;
+    }
+
+    method void erase() {
+        var int x1, y1, x2, y2;
+        let x1 = col * cellW;
+        let y1 = row * cellH;
+        let x2 = x1 + cellW - 2;
+        let y2 = y1 + cellH - 2;
+        do Screen.setColor(false);
+        do Screen.drawRectangle(x1 + 1, y1 + 1, x2 - 1, y2 - 1);
+        return;
+    }
+
+    method void dispose() {
+        do bfsQueue.dispose();
+        do bfsPrev.dispose();
+        do Memory.deAlloc(this);
+        return;
+    }
+}

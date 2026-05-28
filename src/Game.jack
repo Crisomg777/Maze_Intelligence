@@ -1,0 +1,390 @@
+/**
+ * Game.jack
+ * Maze Intelligence - Motor principal del juego.
+ *
+ * Flujo completo en loop:
+ *   1. Pantalla de inicio  → presiona ESPACIO para jugar
+ *      (los ticks de espera = semilla del spawn del enemigo)
+ *   2. Partida             → jugador se mueve, enemigo persigue por BFS
+ *   3. Pantalla de fin     → presiona ESPACIO para volver al inicio
+ *   Repite desde 1 indefinidamente.
+ *
+ * Estados de partida:
+ *   0 = JUGANDO
+ *   1 = GANASTE  (jugador llega a la meta)
+ *   2 = GAME OVER (enemigo atrapa al jugador)
+ *
+ * Jugador: (1,1) — esquina superior izquierda del laberinto.
+ * Meta:    (17,17) — callejón con una sola entrada.
+ * Enemigo: spawn aleatorio fuera de filas 1-8 / cols 1-8.
+ */
+class Game {
+
+    field Array  map;
+    field int    cellW, cellH;
+    field int    goalRow, goalCol;
+
+    constructor Game new() {
+        let cellW   = 25;
+        let cellH   = 12;
+        let goalRow = 17;
+        let goalCol = 17;
+        do buildMap();
+        return this;
+    }
+
+    // ----------------------------------------------------------------
+    // Pantalla de inicio.
+    // Cuenta los ticks mientras el usuario espera y presiona ESPACIO.
+    // Devuelve ese conteo como semilla para el spawn del enemigo.
+    // ----------------------------------------------------------------
+    method int showIntro() {
+        var int ticks, key;
+        let ticks = 0;
+        let key   = 0;
+
+        do Screen.clearScreen();
+        do Output.moveCursor(5,  10);
+        do Output.printString("=== MAZE INTELLIGENCE ===");
+        do Output.moveCursor(8,  6);
+        do Output.printString("Objetivo: llega a la meta (*)");
+        do Output.moveCursor(9,  6);
+        do Output.printString("El enemigo busca el camino mas");
+        do Output.moveCursor(10, 6);
+        do Output.printString("corto para atraparte.");
+        do Output.moveCursor(12, 6);
+        do Output.printString("Controles: flechas del teclado");
+        do Output.moveCursor(15, 6);
+        do Output.printString("Presiona ESPACIO para iniciar...");
+
+        // Contar ticks hasta que el usuario presione ESPACIO (32)
+        while (~(key = 32)) {
+            let ticks = ticks + 1;
+            do Sys.wait(50);
+            let key = Keyboard.keyPressed();
+        }
+
+        // Esperar a que suelte ESPACIO antes de arrancar
+        while (~(Keyboard.keyPressed() = 0)) {
+            do Sys.wait(30);
+        }
+
+        return ticks;
+    }
+
+    // ----------------------------------------------------------------
+    // Pantalla de fin. Muestra resultado y espera ESPACIO para reiniciar.
+    // ----------------------------------------------------------------
+    method void showEnd(int result) {
+        do Screen.clearScreen();
+        do Output.moveCursor(8, 10);
+
+        if (result = 1) {
+            do Output.printString("**** GANASTE! ****");
+            do Output.moveCursor(10, 6);
+            do Output.printString("Lograste llegar a la meta.");
+        } else {
+            do Output.printString("**** GAME OVER ****");
+            do Output.moveCursor(10, 6);
+            do Output.printString("El enemigo te atrapo.");
+        }
+
+        do Output.moveCursor(13, 6);
+        do Output.printString("Presiona ESPACIO para volver a jugar...");
+
+        // Esperar ESPACIO (32)
+        while (~(Keyboard.keyPressed() = 32)) {
+            do Sys.wait(50);
+        }
+        while (~(Keyboard.keyPressed() = 0)) {
+            do Sys.wait(30);
+        }
+        return;
+    }
+
+    // ----------------------------------------------------------------
+    // Una partida completa. Devuelve 1=ganó, 2=perdió.
+    // ----------------------------------------------------------------
+    method int playRound(int seed) {
+        var Player player;
+        var Enemy  enemy;
+        var int    state, key, blinkCount;
+        var boolean goalVisible;
+
+        let state       = 0;
+        let blinkCount  = 0;
+        let goalVisible = true;
+
+        let player = Player.new(1, 1, cellW, cellH);
+        let enemy  = Enemy.new(cellW, cellH, 5, map, seed);
+
+        do Screen.clearScreen();
+        do drawMap();
+        do drawGoal(true);
+        do player.draw();
+        do enemy.draw();
+
+        do Output.moveCursor(21, 0);
+        do Output.printString("Flechas=mover  |  (*) = meta  |  ESC=salir");
+
+        while (state = 0) {
+            let key = Keyboard.keyPressed();
+
+            // ESC termina la partida como derrota
+            if (key = 140) { let state = 2; }
+
+            if (~(key = 0)) {
+                do player.move(key, map);
+            }
+
+            do enemy.move(player.getRow(), player.getCol(), map);
+
+            // Parpadeo de la meta
+            let blinkCount = blinkCount + 1;
+            if (blinkCount > 6) {
+                let blinkCount  = 0;
+                let goalVisible = ~goalVisible;
+                do drawGoal(goalVisible);
+            }
+
+            // Chequear victoria
+            if ((player.getRow() = goalRow) & (player.getCol() = goalCol)) {
+                let state = 1;
+            }
+
+            // Chequear derrota
+            if ((enemy.getRow() = player.getRow()) & (enemy.getCol() = player.getCol())) {
+                let state = 2;
+            }
+
+            do Sys.wait(150);
+        }
+
+        do player.dispose();
+        do enemy.dispose();
+
+        return state;
+    }
+
+    // ----------------------------------------------------------------
+    // Loop principal: intro → partida → fin → intro → ...
+    // ----------------------------------------------------------------
+    method void run() {
+        var int seed, result;
+
+        while (true) {
+            // 1. Pantalla de inicio — obtener semilla del tiempo de espera
+            let seed = showIntro();
+
+            // 2. Jugar una partida
+            let result = playRound(seed);
+
+            // 3. Pantalla de fin — ESPACIO para volver al inicio
+            do showEnd(result);
+        }
+
+        return;
+    }
+
+    // ----------------------------------------------------------------
+    // Dibuja el mapa completo
+    // ----------------------------------------------------------------
+    method void drawMap() {
+        var int r, c, x1, y1, x2, y2;
+        let r = 0;
+        while (r < 20) {
+            let c = 0;
+            while (c < 20) {
+                let x1 = c * cellW;
+                let y1 = r * cellH;
+                let x2 = x1 + cellW;
+                let y2 = y1 + cellH;
+                if (map[(r * 20) + c] = 1) {
+                    do Screen.setColor(true);
+                } else {
+                    do Screen.setColor(false);
+                }
+                do Screen.drawRectangle(x1, y1, x2, y2);
+                let c = c + 1;
+            }
+            let r = r + 1;
+        }
+        return;
+    }
+
+    // ----------------------------------------------------------------
+    // Dibuja/borra la meta parpadeante en (17,17)
+    // ----------------------------------------------------------------
+    method void drawGoal(boolean visible) {
+        var int x1, y1, x2, y2;
+        let x1 = goalCol * cellW;
+        let y1 = goalRow * cellH;
+        let x2 = x1 + cellW - 2;
+        let y2 = y1 + cellH - 2;
+        if (visible) {
+            do Screen.setColor(true);
+            do Screen.drawRectangle(x1, y1, x2, y2);
+            do Screen.setColor(false);
+            do Screen.drawRectangle(x1 + 5, y1 + 3, x2 - 5, y2 - 3);
+        } else {
+            do Screen.setColor(false);
+            do Screen.drawRectangle(x1, y1, x2, y2);
+        }
+        return;
+    }
+
+    // ----------------------------------------------------------------
+    // Mapa 20x20 — 1=muro (negro), 0=camino (blanco)
+    // ----------------------------------------------------------------
+    method void buildMap() {
+        let map = Array.new(400);
+
+        // Fila 0
+        let map[0]=1;  let map[1]=1;  let map[2]=1;  let map[3]=1;
+        let map[4]=1;  let map[5]=1;  let map[6]=1;  let map[7]=1;
+        let map[8]=1;  let map[9]=1;  let map[10]=1; let map[11]=1;
+        let map[12]=1; let map[13]=1; let map[14]=1; let map[15]=1;
+        let map[16]=1; let map[17]=1; let map[18]=1; let map[19]=1;
+
+        // Fila 1
+        let map[20]=1; let map[21]=0; let map[22]=0; let map[23]=0;
+        let map[24]=1; let map[25]=0; let map[26]=0; let map[27]=0;
+        let map[28]=0; let map[29]=0; let map[30]=0; let map[31]=0;
+        let map[32]=1; let map[33]=0; let map[34]=0; let map[35]=0;
+        let map[36]=0; let map[37]=0; let map[38]=0; let map[39]=1;
+
+        // Fila 2
+        let map[40]=1; let map[41]=0; let map[42]=1; let map[43]=0;
+        let map[44]=1; let map[45]=0; let map[46]=1; let map[47]=1;
+        let map[48]=1; let map[49]=1; let map[50]=0; let map[51]=1;
+        let map[52]=1; let map[53]=0; let map[54]=1; let map[55]=1;
+        let map[56]=1; let map[57]=0; let map[58]=1; let map[59]=1;
+
+        // Fila 3
+        let map[60]=1; let map[61]=0; let map[62]=1; let map[63]=0;
+        let map[64]=0; let map[65]=0; let map[66]=0; let map[67]=0;
+        let map[68]=0; let map[69]=1; let map[70]=0; let map[71]=0;
+        let map[72]=0; let map[73]=0; let map[74]=0; let map[75]=0;
+        let map[76]=1; let map[77]=0; let map[78]=0; let map[79]=1;
+
+        // Fila 4
+        let map[80]=1;  let map[81]=0;  let map[82]=1;  let map[83]=1;
+        let map[84]=1;  let map[85]=1;  let map[86]=1;  let map[87]=0;
+        let map[88]=1;  let map[89]=1;  let map[90]=0;  let map[91]=1;
+        let map[92]=1;  let map[93]=1;  let map[94]=0;  let map[95]=1;
+        let map[96]=1;  let map[97]=1;  let map[98]=0;  let map[99]=1;
+
+        // Fila 5
+        let map[100]=1; let map[101]=0; let map[102]=0; let map[103]=0;
+        let map[104]=0; let map[105]=0; let map[106]=1; let map[107]=0;
+        let map[108]=0; let map[109]=0; let map[110]=0; let map[111]=0;
+        let map[112]=0; let map[113]=1; let map[114]=0; let map[115]=0;
+        let map[116]=0; let map[117]=0; let map[118]=0; let map[119]=1;
+
+        // Fila 6
+        let map[120]=1; let map[121]=1; let map[122]=1; let map[123]=0;
+        let map[124]=1; let map[125]=0; let map[126]=1; let map[127]=1;
+        let map[128]=1; let map[129]=0; let map[130]=1; let map[131]=1;
+        let map[132]=0; let map[133]=1; let map[134]=1; let map[135]=0;
+        let map[136]=1; let map[137]=1; let map[138]=1; let map[139]=1;
+
+        // Fila 7
+        let map[140]=1; let map[141]=0; let map[142]=0; let map[143]=0;
+        let map[144]=1; let map[145]=0; let map[146]=0; let map[147]=0;
+        let map[148]=1; let map[149]=0; let map[150]=0; let map[151]=1;
+        let map[152]=0; let map[153]=0; let map[154]=1; let map[155]=0;
+        let map[156]=0; let map[157]=0; let map[158]=0; let map[159]=1;
+
+        // Fila 8
+        let map[160]=1; let map[161]=0; let map[162]=1; let map[163]=1;
+        let map[164]=1; let map[165]=1; let map[166]=0; let map[167]=0;
+        let map[168]=1; let map[169]=0; let map[170]=1; let map[171]=1;
+        let map[172]=0; let map[173]=1; let map[174]=1; let map[175]=1;
+        let map[176]=1; let map[177]=1; let map[178]=0; let map[179]=1;
+
+        // Fila 9
+        let map[180]=1; let map[181]=0; let map[182]=0; let map[183]=0;
+        let map[184]=0; let map[185]=1; let map[186]=0; let map[187]=1;
+        let map[188]=1; let map[189]=0; let map[190]=0; let map[191]=0;
+        let map[192]=0; let map[193]=1; let map[194]=0; let map[195]=0;
+        let map[196]=0; let map[197]=1; let map[198]=0; let map[199]=1;
+
+        // Fila 10
+        let map[200]=1; let map[201]=1; let map[202]=1; let map[203]=1;
+        let map[204]=0; let map[205]=1; let map[206]=0; let map[207]=0;
+        let map[208]=0; let map[209]=0; let map[210]=1; let map[211]=1;
+        let map[212]=0; let map[213]=0; let map[214]=0; let map[215]=1;
+        let map[216]=0; let map[217]=1; let map[218]=0; let map[219]=1;
+
+        // Fila 11
+        let map[220]=1; let map[221]=0; let map[222]=0; let map[223]=1;
+        let map[224]=0; let map[225]=0; let map[226]=0; let map[227]=1;
+        let map[228]=1; let map[229]=0; let map[230]=1; let map[231]=1;
+        let map[232]=0; let map[233]=1; let map[234]=1; let map[235]=1;
+        let map[236]=0; let map[237]=1; let map[238]=0; let map[239]=1;
+
+        // Fila 12
+        let map[240]=1; let map[241]=0; let map[242]=1; let map[243]=1;
+        let map[244]=1; let map[245]=1; let map[246]=0; let map[247]=1;
+        let map[248]=0; let map[249]=0; let map[250]=0; let map[251]=0;
+        let map[252]=0; let map[253]=1; let map[254]=0; let map[255]=0;
+        let map[256]=0; let map[257]=1; let map[258]=0; let map[259]=1;
+
+        // Fila 13
+        let map[260]=1; let map[261]=0; let map[262]=0; let map[263]=0;
+        let map[264]=0; let map[265]=1; let map[266]=0; let map[267]=0;
+        let map[268]=0; let map[269]=1; let map[270]=1; let map[271]=0;
+        let map[272]=1; let map[273]=1; let map[274]=0; let map[275]=1;
+        let map[276]=0; let map[277]=0; let map[278]=0; let map[279]=1;
+
+        // Fila 14
+        let map[280]=1; let map[281]=1; let map[282]=1; let map[283]=0;
+        let map[284]=1; let map[285]=1; let map[286]=1; let map[287]=1;
+        let map[288]=0; let map[289]=1; let map[290]=0; let map[291]=0;
+        let map[292]=0; let map[293]=1; let map[294]=0; let map[295]=1;
+        let map[296]=1; let map[297]=1; let map[298]=0; let map[299]=1;
+
+        // Fila 15
+        let map[300]=1; let map[301]=0; let map[302]=0; let map[303]=0;
+        let map[304]=0; let map[305]=0; let map[306]=0; let map[307]=1;
+        let map[308]=0; let map[309]=1; let map[310]=0; let map[311]=1;
+        let map[312]=0; let map[313]=0; let map[314]=0; let map[315]=0;
+        let map[316]=0; let map[317]=1; let map[318]=0; let map[319]=1;
+
+        // Fila 16
+        let map[320]=1; let map[321]=0; let map[322]=1; let map[323]=1;
+        let map[324]=1; let map[325]=0; let map[326]=1; let map[327]=1;
+        let map[328]=0; let map[329]=1; let map[330]=0; let map[331]=1;
+        let map[332]=1; let map[333]=1; let map[334]=1; let map[335]=0;
+        let map[336]=1; let map[337]=1; let map[338]=0; let map[339]=1;
+
+        // Fila 17
+        let map[340]=1; let map[341]=0; let map[342]=1; let map[343]=0;
+        let map[344]=0; let map[345]=0; let map[346]=0; let map[347]=0;
+        let map[348]=0; let map[349]=0; let map[350]=0; let map[351]=0;
+        let map[352]=0; let map[353]=0; let map[354]=1; let map[355]=0;
+        let map[356]=0; let map[357]=0; let map[358]=0; let map[359]=1;
+
+        // Fila 18
+        let map[360]=1; let map[361]=0; let map[362]=1; let map[363]=0;
+        let map[364]=1; let map[365]=1; let map[366]=1; let map[367]=1;
+        let map[368]=0; let map[369]=1; let map[370]=1; let map[371]=0;
+        let map[372]=1; let map[373]=0; let map[374]=1; let map[375]=0;
+        let map[376]=1; let map[377]=1; let map[378]=0; let map[379]=1;
+
+        // Fila 19
+        let map[380]=1; let map[381]=1; let map[382]=1; let map[383]=1;
+        let map[384]=1; let map[385]=1; let map[386]=1; let map[387]=1;
+        let map[388]=1; let map[389]=1; let map[390]=1; let map[391]=1;
+        let map[392]=1; let map[393]=1; let map[394]=1; let map[395]=1;
+        let map[396]=1; let map[397]=1; let map[398]=1; let map[399]=1;
+
+        return;
+    }
+
+    method void dispose() {
+        do map.dispose();
+        do Memory.deAlloc(this);
+        return;
+    }
+}
