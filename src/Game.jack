@@ -124,7 +124,7 @@ class Game {
         do player.draw();
         do enemy.draw();
 
-        do Output.moveCursor(21, 0);
+        do Output.moveCursor(22, 0);
         do Output.printString("Flechas=mover  |  (*) = meta  |  ESC=salir");
 
         while (state = 0) {
