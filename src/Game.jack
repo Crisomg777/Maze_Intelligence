@@ -141,7 +141,7 @@ class Game {
 
             // Parpadeo de la meta
             let blinkCount = blinkCount + 1;
-            if (blinkCount > 6) {
+            if (blinkCount > 8) {
                 let blinkCount  = 0;
                 let goalVisible = ~goalVisible;
                 do drawGoal(goalVisible);

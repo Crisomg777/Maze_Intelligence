@@ -47,12 +47,35 @@ class Player {
 
     method void draw() {
         var int x1, y1, x2, y2;
+        var int leftEyeX1, leftEyeY1, leftEyeX2, leftEyeY2;
+        var int rightEyeX1, rightEyeY1, rightEyeX2, rightEyeY2;
+
         let x1 = col * cellW;
         let y1 = row * cellH;
         let x2 = x1 + cellW - 2;
         let y2 = y1 + cellH - 2;
+
+        // Cuerpo del jugador
         do Screen.setColor(true);
         do Screen.drawRectangle(x1 + 2, y1 + 2, x2 - 2, y2 - 2);
+
+        // Ojo izquierdo
+        let leftEyeX1 = x1 + 6;
+        let leftEyeY1 = y1 + 4;
+        let leftEyeX2 = x1 + 8;
+        let leftEyeY2 = y1 + 5;
+
+        // Ojo derecho
+        let rightEyeX1 = x1 + 14;
+        let rightEyeY1 = y1 + 4;
+        let rightEyeX2 = x1 + 16;
+        let rightEyeY2 = y1 + 5;
+
+        // Dibujar ojos en negro
+        do Screen.setColor(false);
+        do Screen.drawRectangle(leftEyeX1, leftEyeY1, leftEyeX2, leftEyeY2);
+        do Screen.drawRectangle(rightEyeX1, rightEyeY1, rightEyeX2, rightEyeY2);
+
         return;
     }
 
