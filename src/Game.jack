@@ -44,8 +44,8 @@ class Game {
         let key   = 0;
 
         do Screen.clearScreen();
-        do Output.moveCursor(5,  10);
-        do Output.printString("=== MAZE INTELLIGENCE ===");
+        do Output.moveCursor(5, 6);
+        do Output.printString("===== MAZE INTELLIGENCE =====");
         do Output.moveCursor(8,  6);
         do Output.printString("Objetivo: llega a la meta (*)");
         do Output.moveCursor(9,  6);
@@ -157,7 +157,7 @@ class Game {
                 let state = 2;
             }
 
-            do Sys.wait(150);
+            do Sys.wait(90);
         }
 
         do player.dispose();
@@ -219,8 +219,8 @@ class Game {
         var int x1, y1, x2, y2;
         let x1 = goalCol * cellW;
         let y1 = goalRow * cellH;
-        let x2 = x1 + cellW - 2;
-        let y2 = y1 + cellH - 2;
+        let x2 = x1 + cellW - 1;
+        let y2 = y1 + cellH - 1;
         if (visible) {
             do Screen.setColor(true);
             do Screen.drawRectangle(x1, y1, x2, y2);
